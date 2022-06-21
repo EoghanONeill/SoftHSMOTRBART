@@ -22,7 +22,11 @@ hs_motr_bart = function(x,
                      a = 1,
                      b = 1,
                      tau_b = 1,
-                     ancestors = FALSE) {
+                     ancestors = FALSE,
+                     fix_var = TRUE) {
+
+  tau_b <- ntrees
+
 
   x = as.data.frame(x)
 
@@ -59,6 +63,10 @@ hs_motr_bart = function(x,
   sigma2_store = rep(NA, store_size)
   tau_b_store = rep(NA, store_size)
   y_hat_store = matrix(NA, ncol = length(y), nrow = store_size)
+  var_count = rep(0, ncol(X_orig))
+  var_count_store = matrix(0, ncol = ncol(X_orig), nrow = store_size)
+  s_prob_store = matrix(0, ncol = ncol(X_orig), nrow = store_size)
+
   tree_fits_store = matrix(0, ncol = ntrees, nrow = length(y))
   log_lik_store = rep(NA, store_size)
 
@@ -101,6 +109,8 @@ hs_motr_bart = function(x,
       sigma2_store[curr] = sigma2
       tau_b_store[curr] = tau_b
       y_hat_store[curr,] = predictions
+      var_count_store[curr,] = var_count
+      s_prob_store[curr,] = s
       log_lik_store[curr] = log_lik
     }
 
@@ -212,6 +222,18 @@ hs_motr_bart = function(x,
 
         curr_trees[[j]] = new_trees[[j]] # The current tree "becomes" the new tree, if the latter is better
 
+        if (type =='change'){
+          var_count[curr_trees[[j]]$var[1] - 1] = var_count[curr_trees[[j]]$var[1] - 1] - 1
+          var_count[curr_trees[[j]]$var[2] - 1] = var_count[curr_trees[[j]]$var[2] - 1] + 1
+        }
+
+        if (type=='grow'){
+          var_count[curr_trees[[j]]$var - 1] = var_count[curr_trees[[j]]$var - 1] + 1 } # -1 because of the intercept in X
+
+        if (type=='prune'){
+          var_count[curr_trees[[j]]$var - 1] = var_count[curr_trees[[j]]$var - 1] - 1 } # -1 because of the intercept in X
+
+
         #And all the other objects and variables are updated:
         int = int_new
         phi_matrix = phi_matrix_new
@@ -250,11 +272,15 @@ hs_motr_bart = function(x,
 
     # Update the variance of the terminal node parameters
     beta_trees = paste_betas(curr_trees,ntrees)
-    tau_b = simulate_tau_b(beta_trees, sigma2, a,b)
-
+    if(fix_var==FALSE){
+      tau_b = simulate_tau_b(beta_trees, sigma2, a,b)
+    }
     # Get the overall log likelihood
     log_lik = sum(dnorm(y_scale, mean = predictions, sd = sqrt(sigma2), log = TRUE))
 
+    if (sparse == 'TRUE' & i > floor(TotIter*0.1)){
+      s = update_s(var_count, p, 1)
+    }
 
   }# End iterations loop
 
@@ -274,7 +300,9 @@ hs_motr_bart = function(x,
               ntrees = ntrees,
               y_mean = y_mean,
               y_sd = y_sd,
-              ancestors = ancestors
+              ancestors = ancestors,
+              var_count_store = var_count_store,
+              s = s_prob_store
               ))
 }
 
