@@ -22,11 +22,11 @@ hs_motr_bart = function(x,
                      a = 1,
                      b = 1,
                      tau_b = 1,
+                     mh_tau = FALSE,
                      ancestors = FALSE,
                      fix_var = TRUE) {
 
   tau_b <- ntrees
-
 
   x = as.data.frame(x)
 
@@ -60,6 +60,7 @@ hs_motr_bart = function(x,
   store_size = npost
   tree_store = vector('list', store_size)
   beta_store = vector('list', length = store_size)
+  tau_store = vector('list', length = store_size)
   sigma2_store = rep(NA, store_size)
   tau_b_store = rep(NA, store_size)
   y_hat_store = matrix(NA, ncol = length(y), nrow = store_size)
@@ -92,9 +93,14 @@ hs_motr_bart = function(x,
                              style = 3, width = 60,
                              title = 'Running rBART...')
 
+  tau_rate = 10
+  tau = rep(tau_rate, ntrees) #sample set of bandwidth for each tree from the exponential distribution
+  tau_new = numeric(ntrees) #initiate new bandwiths for the mh-step
+
   #Initialize two additional objects of type list to store the beta's and bandwidths
 
   beta_hat = vector('list', length = ntrees)
+  tau_vec = vector('list', length = ntrees)
 
   # Start the MCMC iterations loop
   for (i in 1:TotIter) {
@@ -106,6 +112,7 @@ hs_motr_bart = function(x,
       curr = (i - nburn)/nthin
       tree_store[[curr]] = curr_trees
       beta_store[[curr]] = beta_hat
+      tau_store[[curr]] = tau_vec
       sigma2_store[curr] = sigma2
       tau_b_store[curr] = tau_b
       y_hat_store[curr,] = predictions
@@ -149,7 +156,7 @@ hs_motr_bart = function(x,
       }
       else{
         #This function creates the prob-matrix (phi_matrix in soft MOTR) based on the standardized data, ancestors object, the phi-function and the bandwidth
-        prob_matrix = t(apply(X_stand,1,phi, anc = anc, tau = 1))
+        prob_matrix = t(apply(X_stand,1,phi, anc , tau[[j]]))
 
         phi_matrix = phi_matrix(curr_trees[[j]],int, X_stand,prob_matrix)
 
@@ -185,11 +192,11 @@ hs_motr_bart = function(x,
       }
       else{
         #This function creates the prob-matrix (phi-matrix in soft MOTR) based on the standardized data, ancestors object, the phi-function and the bandwidth
-        prob_matrix_new = t(apply(X_stand,1,phi, anc = anc_new, tau = 1))
+        prob_matrix_new = t(apply(X_stand,1,phi, anc_new, tau[[j]] ))
 
         phi_matrix_new = phi_matrix(new_trees[[j]],int_new, X_stand,prob_matrix_new)
 
-        X_new = design_matrix(curr_trees[[j]], X_stand, phi_matrix_new,int_new)
+        X_new = design_matrix(new_trees[[j]], X_stand, phi_matrix_new,int_new)
       }
 
 
@@ -218,7 +225,7 @@ hs_motr_bart = function(x,
       a = alpha_mh(l_new,l_old, curr_trees[[j]],new_trees[[j]], type)
 
 
-      if(min(1,a) > runif(1)) { # In case the alpha is bigger than a uniformly sampled value between zero and one
+      if(a > runif(1)) { # In case the alpha is bigger than a uniformly sampled value between zero and one
 
         curr_trees[[j]] = new_trees[[j]] # The current tree "becomes" the new tree, if the latter is better
 
@@ -236,12 +243,67 @@ hs_motr_bart = function(x,
 
         #And all the other objects and variables are updated:
         int = int_new
+        anc = anc_new
+        prob_matrix = prob_matrix_new
         phi_matrix = phi_matrix_new
         X = X_new
         p = p_new
         V = V_new
         inv_V = inv_V_new
       }
+
+      # The Metropolis Hastings MH-step for the bandwidth tau follows the same principle
+
+      if(mh_tau){
+        # Compute the log of the marginalized likelihood and the log of the tau prior for the current tree
+
+        l_old = conditional + log(tau_prior(tau[[j]], tau_rate)) + log(tau[[j]])
+
+        # Calculate the new bandwidth using Random Walk
+        tau_new[[j]] = tau[[j]]*exp(runif(1,-1))
+
+        if(is.null(int) | is.null(anc)){
+          X_new = matrix(1, nrow = nrow(X_stand), ncol = 1) #If the ancestors object is null, this means the tree is a stump and the design matrix will be one vector
+        }
+        else{
+          prob_matrix_new = t(apply(X_stand,1,phi, anc,  tau_new[[j]])) # Use the new bandwidth to obtain the new prob-matrix
+
+          phi_matrix_new = phi_matrix(curr_trees[[j]],int, X_stand,prob_matrix_new) # consequently the new phi-matrix
+
+          X_new = design_matrix(curr_trees[[j]], X_stand,phi_matrix_new, int) # And consequently obtain the new design matrix
+        }
+
+        # Compute the log of the marginalized likelihood, log of the tau prior for the new tree
+        conditional_new = conditional_tilde(curr_trees[[j]],
+                                            X_new,
+                                            current_partial_residuals,
+                                            sigma2,
+                                            V,
+                                            inv_V,
+                                            nu,
+                                            lambda,
+                                            tau_b,
+                                            ancestors,
+                                            ntrees)
+        l_new = conditional_new + log(tau_prior(tau_new[[j]], tau_rate)) + log(tau_new[[j]])
+
+
+        # Here, the calculation of alpha doesn't depend on any transition probabilities
+        a = exp(l_new - l_old)
+
+        if(a > runif(1)) { # In case the alpha is bigger than a uniformly sampled value between zero and one
+
+          tau[[j]] = tau_new[[j]] # The current bandwidth "becomes" the new bandwidth, if the latter is better
+
+          #And all the other objects are updated:
+          X = X_new
+          prob_matrix = prob_matrix_new
+          phi_matrix = phi_matrix_new
+
+        }
+
+      }
+
 
       # Update beta whether tree accepted or not
       curr_trees[[j]] = simulate_beta_tilde(curr_trees[[j]],
@@ -256,6 +318,7 @@ hs_motr_bart = function(x,
 
       # Obtain the estimated beta's and subsequently the current tree fit
       beta_hat[[j]] = get_beta_hat(curr_trees[[j]])
+      tau_vec[[j]] = tau[[j]]
       current_fit = X%*%beta_hat[[j]]
 
 
@@ -290,6 +353,7 @@ hs_motr_bart = function(x,
               sigma2 = sigma2_store*y_sd^2,
               y_hat = y_hat_store*y_sd + y_mean,
               beta_trees = beta_store,
+              tau_trees = tau_store,
               tau_b_trees = tau_b_store,
               log_lik = log_lik_store,
               center_x = center,

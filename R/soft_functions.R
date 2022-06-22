@@ -175,7 +175,6 @@ variable_list = function(tree, internal){
 
 # The design matrix function constructs the design matrix based on the phi matrix and the variables involved in each terminal, input: tree, data, phi matrix and information about the internals
 design_matrix = function(mtree,x, phi_matrix, int){
-
   design = matrix(1,nrow(x),1)*phi_matrix[,1]
 
   if(is.matrix(int)){
@@ -211,7 +210,6 @@ conditional_tilde = function(tree, X, R, sigma2, V, inv_V, nu, lambda, tau_b, an
   logdettemp <- log(prod(diag(temp_chol)^2))
 
   # log_lik= (-N/2)*log(2*pi) + (-1/2)*log(det(Sigma)) + -(1/2)*t(R)%*%Sigma_inv%*%R
-
   log_lik= (-N/2)*log(2*pi) + (-1/2)*logdettemp + -(1/2)*t(R)%*%Sigma_inv%*%R
 
   if(is.infinite(log_lik)){
@@ -303,7 +301,7 @@ get_beta_hat = function(sim_beta){
 # The tau prior function calculates the prior probability for the bandwidth
 # This is relevant for the second Metropolis Hastings step, input; tau value and tau rate
 tau_prior= function(tau_value, tau_rate){
-  tau = pexp(tau_value,(1/tau_rate), lower.tail = FALSE)
+  tau = dexp(tau_value,tau_rate)
   return(tau)
 }
 
@@ -346,11 +344,10 @@ test_function = function(newdata,object){
   # Initiliaze matrices to store the predictions for each observation and iteration
   preds = matrix(NA, nrow = nrow(newdata),
                  ncol = n_its)
-  # confs = matrix(NA, nrow = nrow(newdata),
-  #                ncol = n_its)
 
   # Now loop through iterations and get predictions
   for(i in 1:n_its) {
+
     pred = numeric(nrow(newdata))
     # conf = numeric(nrow(newdata))
 
@@ -359,56 +356,32 @@ test_function = function(newdata,object){
       # get the tree, beta vector and bandwidth of the soft motr object
       tree = object$trees[[i]][[j]]
       beta = object$beta_trees[[i]][[j]]
+      tau = object$tau_trees[[i]][[j]]
       int = get_internals(tree)
       anc = na.omit(get_branch(tree))
 
       # get the branching information and bandwidth of the trained trees and apply to the test data
       if(!is.null(int) & !is.null(anc)){
 
-        prob_matrix = t(apply(newdata,1,phi, anc = anc, tau = 1))
+        prob_matrix = t(apply(newdata,1,phi, anc , tau))
         phi_matrix = phi_matrix(tree,int,newdata,prob_matrix)
         design = design_matrix(tree,newdata,phi_matrix,int)
 
-        # print("design = ")
-        # print(design)
-        #
-        # print("beta = ")
-        # print(beta)
-
         # calculate the model fit
-
-        if(ncol(design)!= length(beta)){
-          print("ncol(design)!= length(beta)")
-          print('ncol(design) = ')
-          print(ncol(design))
-          print(" length(beta) = ")
-          print(length(beta) )
-
-
-        }
-
         pred = pred + (design %*% beta)
-
-
-
-
-        # conf = conf + design %*% beta  + rnorm(1,0, sqrt(object$sigma2[[j]])) # add a sample for the normal distribution to obtain confidence intervals
       }
       else{
 
         pred = pred + rep(beta, nrow(newdata))
-        # conf = conf + rep(beta, nrow(newdata))  + rnorm(1,0, sqrt(object$sigma2[[j]]))
       }
 
     }
 
     # re-scale the predictions
     preds[,i] = object$y_mean + object$y_sd*pred
-    # confs[,i] = object$y_mean + object$y_sd*conf
 
   }
 
-  return(list(predictions = preds#, confidence = confs
-              ))
+  return(list(predictions = preds))
 
 }
