@@ -156,9 +156,47 @@ hs_motr_bart = function(x,
       }
       else{
         #This function creates the prob-matrix (phi_matrix in soft MOTR) based on the standardized data, ancestors object, the phi-function and the bandwidth
-        prob_matrix = t(apply(X_stand,1,phi, anc , tau[[j]]))
+        # prob_matrix = t(apply(X_stand,1,phi, anc , tau[[j]]))
 
-        phi_matrix = phi_matrix(curr_trees[[j]],int, X_stand,prob_matrix)
+        tautemp = tau[[j]]
+
+        prob_matrix = phi_app_soft(X_stand, anc, tautemp)
+
+
+        # phi_matrix = phi_matrix(curr_trees[[j]],int, X_stand,prob_matrix)
+
+        int_temp <- int
+        if(!is.matrix(int_temp)){
+          # print("int_temp = ")
+          # print(int_temp)
+
+          int_temp <- t(int_temp)
+        }
+
+
+
+        # print("anc = ")
+        # print(anc)
+
+
+        phi_matrix = suppressWarnings(
+          phi_app_softHS(matrix(as.numeric(curr_trees[[j]]$tree_matrix),
+                            nrow = nrow(curr_trees[[j]]$tree_matrix),
+                            ncol = ncol(curr_trees[[j]]$tree_matrix)) ,
+                     # matrix(as.numeric(curr_trees[[j]]$node_indices),
+                     #        nrow = length(curr_trees[[j]]$node_indices),
+                     #        ncol = 1)  ,
+                     matrix(as.numeric(int_temp),
+                            nrow = nrow(int_temp),
+                            ncol = ncol(int_temp)) ,
+                     as.matrix(X_stand),
+                     matrix(as.numeric(prob_matrix),
+                            nrow = nrow(prob_matrix),
+                            ncol = ncol(prob_matrix)))
+          )
+
+
+
 
         X = design_matrix(curr_trees[[j]], X_stand, phi_matrix,int)
       }
@@ -192,9 +230,48 @@ hs_motr_bart = function(x,
       }
       else{
         #This function creates the prob-matrix (phi-matrix in soft MOTR) based on the standardized data, ancestors object, the phi-function and the bandwidth
-        prob_matrix_new = t(apply(X_stand,1,phi, anc_new, tau[[j]] ))
+        # prob_matrix_new = t(apply(X_stand,1,phi, anc_new, tau[[j]] ))
 
-        phi_matrix_new = phi_matrix(new_trees[[j]],int_new, X_stand,prob_matrix_new)
+
+        tautemp = tau[[j]]
+
+        prob_matrix_new = phi_app_soft(X_stand, anc_new, tautemp)
+
+
+        # phi_matrix_new = phi_matrix(new_trees[[j]],int_new, X_stand,prob_matrix_new)
+
+        int_temp <- int_new
+        if(!is.matrix(int_temp)){
+          # print("int_temp = ")
+          # print(int_temp)
+
+          int_temp <- t(int_temp)
+        }
+
+
+
+        # print("int_temp = ")
+        # print(int_temp)
+
+        phi_matrix_new = suppressWarnings(
+          phi_app_softHS(matrix(as.numeric(new_trees[[j]]$tree_matrix),
+                            nrow = nrow(new_trees[[j]]$tree_matrix),
+                            ncol = ncol(new_trees[[j]]$tree_matrix)) ,
+                     # matrix(as.numeric(new_trees[[j]]$node_indices),
+                     #        nrow = length(new_trees[[j]]$node_indices),
+                     #        ncol = 1)  ,
+                     matrix(as.numeric(int_temp),
+                            nrow = nrow(int_temp),
+                            ncol = ncol(int_temp)) ,
+                     as.matrix(X_stand),
+                     matrix(as.numeric(prob_matrix_new),
+                            nrow = nrow(prob_matrix_new),
+                            ncol = ncol(prob_matrix_new)))
+        )
+
+
+
+
 
         X_new = design_matrix(new_trees[[j]], X_stand, phi_matrix_new,int_new)
       }

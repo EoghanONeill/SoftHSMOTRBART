@@ -363,8 +363,37 @@ test_function = function(newdata,object){
       # get the branching information and bandwidth of the trained trees and apply to the test data
       if(!is.null(int) & !is.null(anc)){
 
-        prob_matrix = t(apply(newdata,1,phi, anc , tau))
-        phi_matrix = phi_matrix(tree,int,newdata,prob_matrix)
+        # prob_matrix = t(apply(newdata,1,phi, anc , tau))
+
+        prob_matrix = phi_app_soft(newdata, anc, tau)
+
+        # phi_matrix = phi_matrix(tree,int,newdata,prob_matrix)
+
+        int_temp <- int
+        if(!is.matrix(int_temp)){
+          # print("int_temp = ")
+          # print(int_temp)
+
+          int_temp <- t(int_temp)
+        }
+
+
+        phi_matrix = suppressWarnings(phi_app_softHS(matrix(as.numeric(tree$tree_matrix),
+                                                             nrow = nrow(tree$tree_matrix),
+                                                             ncol = ncol(tree$tree_matrix)) ,
+                                                      # matrix(as.numeric(tree$node_indices),
+                                                      #        nrow = length(tree$node_indices),
+                                                      #        ncol = 1)  ,
+                                                      matrix(as.numeric(int_temp),
+                                                             nrow = nrow(int_temp),
+                                                             ncol = ncol(int_temp)) ,
+                                                      as.matrix(newdata),
+                                                      matrix(as.numeric(prob_matrix),
+                                                             nrow = nrow(prob_matrix),
+                                                             ncol = ncol(prob_matrix)))
+                                      )
+
+
         design = design_matrix(tree,newdata,phi_matrix,int)
 
         # calculate the model fit
