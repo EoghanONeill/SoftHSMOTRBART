@@ -193,7 +193,7 @@ arma::mat phi_app_softHS( arma::mat treemat,
       double sumleft = arma::sum(tempprobs_left);
       double sumright = arma::sum(tempprobs_right);
 
-      phi_matrix(i,j) = (n_right*sumleft + n_left*sumright )/temp_denom;
+      phi_matrix(i,j) = (n_right*sumleft - n_left*sumright )/temp_denom;
 
 
     }
